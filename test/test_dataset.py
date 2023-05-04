@@ -180,7 +180,7 @@ class TableTestCase(unittest.TestCase):
         assert len(self.tbl) == len(TEST_DATA) + 1, len(self.tbl)
 
     def test_insert_ignore_all_key(self):
-        for i in range(0, 4):
+        for _ in range(0, 4):
             self.tbl.insert_ignore(
                 {"date": datetime(2011, 1, 2), "temperature": -10, "place": "Berlin"},
                 ["date", "temperature", "place"],
@@ -224,7 +224,7 @@ class TableTestCase(unittest.TestCase):
 
     def test_upsert_all_key(self):
         assert len(self.tbl) == len(TEST_DATA), len(self.tbl)
-        for i in range(0, 2):
+        for _ in range(0, 2):
             self.tbl.upsert(
                 {"date": datetime(2011, 1, 2), "temperature": -10, "place": "Berlin"},
                 ["date", "temperature", "place"],
@@ -456,7 +456,7 @@ class TableTestCase(unittest.TestCase):
         assert self.tbl._table is not None, "table shouldn't be dropped yet"
         self.tbl.drop()
         assert self.tbl._table is None, "table should be dropped now"
-        assert list(self.tbl.all()) == [], self.tbl.all()
+        assert not list(self.tbl.all()), self.tbl.all()
         assert self.tbl.count() == 0, self.tbl.count()
 
     def test_table_drop(self):
@@ -483,9 +483,7 @@ class TableTestCase(unittest.TestCase):
             pass
 
     def test_iter(self):
-        c = 0
-        for row in self.tbl:
-            c += 1
+        c = sum(1 for _ in self.tbl)
         assert c == len(self.tbl)
 
     def test_update(self):
@@ -538,7 +536,7 @@ class TableTestCase(unittest.TestCase):
 
     def test_empty_query(self):
         empty = list(self.tbl.find(place="not in data"))
-        assert len(empty) == 0, empty
+        assert not empty, empty
 
 
 class Constructor(dict):

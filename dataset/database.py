@@ -111,9 +111,7 @@ class Database(object):
     @property
     def in_transaction(self):
         """Check if this database is in a transactional context."""
-        if not hasattr(self.local, "tx"):
-            return False
-        return len(self.local.tx) > 0
+        return len(self.local.tx) > 0 if hasattr(self.local, "tx") else False
 
     def _flush_tables(self):
         """Clear the table metadata after transaction rollbacks."""
@@ -192,11 +190,7 @@ class Database(object):
         """Check if the given table name exists in the database."""
         try:
             table_name = normalize_table_name(table_name)
-            if table_name in self.tables:
-                return True
-            if table_name in self.views:
-                return True
-            return False
+            return True if table_name in self.tables else table_name in self.views
         except ValueError:
             return False
 
@@ -281,10 +275,12 @@ class Database(object):
             # you can also use the short-hand syntax:
             table = db['population']
         """
-        if not self.ensure_schema:
-            return self.load_table(table_name)
-        return self.create_table(
-            table_name, primary_id, primary_type, primary_increment
+        return (
+            self.create_table(
+                table_name, primary_id, primary_type, primary_increment
+            )
+            if self.ensure_schema
+            else self.load_table(table_name)
         )
 
     def __getitem__(self, table_name):
@@ -327,4 +323,4 @@ class Database(object):
 
     def __repr__(self):
         """Text representation contains the URL."""
-        return "<Database(%s)>" % safe_url(self.url)
+        return f"<Database({safe_url(self.url)})>"

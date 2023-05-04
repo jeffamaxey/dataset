@@ -52,9 +52,7 @@ class Table(object):
     @property
     def exists(self):
         """Check to see if the table currently exists in the database."""
-        if self._table is not None:
-            return True
-        return self.name in self.db
+        return True if self._table is not None else self.name in self.db
 
     @property
     def table(self):
@@ -143,9 +141,7 @@ class Table(object):
         if self._check_ensure(ensure):
             self.create_index(keys)
         args, _ = self._keys_to_args(row, keys)
-        if self.count(**args) == 0:
-            return self.insert(row, ensure=False)
-        return False
+        return self.insert(row, ensure=False) if self.count(**args) == 0 else False
 
     def insert_many(self, rows, chunk_size=1000, ensure=None, types=None):
         """Add many rows at a time.
@@ -234,13 +230,13 @@ class Table(object):
 
             # bindparam requires names to not conflict (cannot be "id" for id)
             for key in keys:
-                row["_%s" % key] = row[key]
+                row[f"_{key}"] = row[key]
                 row.pop(key)
             chunk.append(row)
 
             # Update when chunk_size is fulfilled or this is the last row
             if len(chunk) == chunk_size or index == len(rows) - 1:
-                cl = [self.table.c[k] == bindparam("_%s" % k) for k in keys]
+                cl = [self.table.c[k] == bindparam(f"_{k}") for k in keys]
                 stmt = self.table.update(
                     whereclause=and_(True, *cl),
                     values={col: bindparam(col, required=False) for col in columns},
@@ -262,9 +258,7 @@ class Table(object):
         if self._check_ensure(ensure):
             self.create_index(keys)
         row_count = self.update(row, keys, ensure=False, return_count=True)
-        if row_count == 0:
-            return self.insert(row, ensure=False)
-        return True
+        return self.insert(row, ensure=False) if row_count == 0 else True
 
     def upsert_many(self, rows, keys, chunk_size=1000, ensure=None, types=None):
         """
@@ -325,7 +319,7 @@ class Table(object):
         if self._table is None:
             # Create the table with an initial set of columns.
             if not self._auto_create:
-                raise DatasetException("Table does not exist: %s" % self.name)
+                raise DatasetException(f"Table does not exist: {self.name}")
             # Keep the lock scope small because this is run very often.
             with self.db.lock:
                 self._threading_warn()
@@ -343,7 +337,7 @@ class Table(object):
                     )
                     self._table.append_column(column)
                 for column in columns:
-                    if not column.name == self._primary_id:
+                    if column.name != self._primary_id:
                         self._table.append_column(column)
                 self._table.create(self.db.executable, checkfirst=True)
                 self._columns = None
@@ -382,9 +376,7 @@ class Table(object):
         return out
 
     def _check_ensure(self, ensure):
-        if ensure is None:
-            return self.db.ensure_schema
-        return ensure
+        return self.db.ensure_schema if ensure is None else ensure
 
     def _generate_clause(self, column, op, value):
         if op in ("like",):
@@ -415,9 +407,9 @@ class Table(object):
             start, end = value
             return self.table.c[column].between(start, end)
         if op in ("startswith",):
-            return self.table.c[column].like(value + "%")
+            return self.table.c[column].like(f"{value}%")
         if op in ("endswith",):
-            return self.table.c[column].like("%" + value)
+            return self.table.c[column].like(f"%{value}")
         return false()
 
     def _args_to_clause(self, args, clauses=()):
@@ -429,8 +421,10 @@ class Table(object):
             elif isinstance(value, (list, tuple, set)):
                 clauses.append(self._generate_clause(column, "in", value))
             elif isinstance(value, dict):
-                for op, op_value in value.items():
-                    clauses.append(self._generate_clause(column, op, op_value))
+                clauses.extend(
+                    self._generate_clause(column, op, op_value)
+                    for op, op_value in value.items()
+                )
             else:
                 clauses.append(self._generate_clause(column, "=", value))
         return and_(True, *clauses)
@@ -473,7 +467,7 @@ class Table(object):
         """
         name = self._get_column_name(name)
         if self.has_column(name):
-            log.debug("Column exists: %s" % name)
+            log.debug(f"Column exists: {name}")
             return
         self._sync_table((Column(name, type, **kwargs),))
 
@@ -529,7 +523,7 @@ class Table(object):
         """Check if an index exists to cover the given ``columns``."""
         if not self.exists:
             return False
-        columns = set([self._get_column_name(c) for c in ensure_list(columns)])
+        columns = {self._get_column_name(c) for c in ensure_list(columns)}
         if columns in self._indexes:
             return True
         for column in columns:
@@ -570,14 +564,11 @@ class Table(object):
                 name = name or index_name(self.name, columns)
                 columns = [self.table.c[c] for c in columns]
 
-                # MySQL crashes out if you try to index very long text fields,
-                # apparently. This defines (a somewhat random) prefix that
-                # will be captured by the index, after which I assume the engine
-                # conducts a more linear scan:
-                mysql_length = {}
-                for col in columns:
-                    if isinstance(col.type, MYSQL_LENGTH_TYPES):
-                        mysql_length[col.name] = 10
+                mysql_length = {
+                    col.name: 10
+                    for col in columns
+                    if isinstance(col.type, MYSQL_LENGTH_TYPES)
+                }
                 kw["mysql_length"] = mysql_length
 
                 idx = Index(name, *columns, **kw)
@@ -694,11 +685,11 @@ class Table(object):
         for column in args:
             if isinstance(column, ClauseElement):
                 clauses.append(column)
-            else:
-                if not self.has_column(column):
-                    raise DatasetException("No such column: %s" % column)
+            elif self.has_column(column):
                 columns.append(self.table.c[column])
 
+            else:
+                raise DatasetException(f"No such column: {column}")
         clause = self._args_to_clause(_filter, clauses=clauses)
         if not len(columns):
             return iter([])
@@ -728,4 +719,4 @@ class Table(object):
 
     def __repr__(self):
         """Get table representation."""
-        return "<Table(%s)>" % self.table.name
+        return f"<Table({self.table.name})>"
